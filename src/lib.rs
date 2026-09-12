@@ -16,7 +16,8 @@
 //! - [`dictionary`]: replace values with small indices into a first-seen table.
 //!
 //! All four implement [`codec::Codec`] and can be selected at runtime via
-//! [`codec::Scheme`].
+//! [`codec::Scheme`]. Full 1024-value blocks of FOR/delta bit-packing use the
+//! transposed layout in [`transposed`].
 //!
 //! ## The `BitPackable` abstraction
 //!
@@ -95,5 +96,6 @@ pub mod delta;
 pub mod dictionary;
 pub mod frame_of_reference;
 pub mod rle;
+pub mod transposed;
 
 pub use codec::{Codec, Scheme};

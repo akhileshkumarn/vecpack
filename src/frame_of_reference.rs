@@ -22,7 +22,8 @@
 //! count is derived from `n`, so it is not stored explicitly.
 
 use crate::BitPackable;
-use crate::bitpack::{BLOCK, pack, packed_len, required_bits, unpack};
+use crate::bitpack::{BLOCK, packed_len, required_bits};
+use crate::transposed::{pack_auto, unpack_auto};
 
 /// Encode `values` using per-block frame-of-reference + bit-packing.
 pub fn encode<T: BitPackable>(values: &[T]) -> Vec<u8> {
@@ -53,7 +54,7 @@ pub fn encode<T: BitPackable>(values: &[T]) -> Vec<u8> {
 
         min.write_le(&mut out);
         out.push(width as u8);
-        pack(&residuals, width, &mut out);
+        pack_auto(&residuals, width, &mut out);
     }
     out
 }
@@ -76,7 +77,7 @@ pub fn decode<T: BitPackable>(bytes: &[u8]) -> Vec<T> {
 
         let plen = packed_len(count, width);
         residuals.clear();
-        unpack(&bytes[pos..pos + plen], width, count, &mut residuals);
+        unpack_auto(&bytes[pos..pos + plen], width, count, &mut residuals);
         pos += plen;
 
         for &d in &residuals {

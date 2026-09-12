@@ -28,14 +28,17 @@
 //! repeated per block of up to BLOCK values (count = block length):
 //!   [ base: T (BYTES) ]          first value of the block (delta reference)
 //!   [ width: u8 ]                bits per zig-zag delta
-//!   [ packed zig-zag deltas ]    packed_len(count - 1, width) bytes
+//!   [ packed zig-zag deltas ]    packed_len(count, width) bytes
+//!                                (index 0 is unused/zero so a 1024-value
+//!                                block hits the transposed kernel)
 //! ```
 //!
 //! Blocks are independent (each carries its own `base`), which keeps random
 //! access and future parallel decode simple.
 
 use crate::BitPackable;
-use crate::bitpack::{BLOCK, pack, packed_len, required_bits, unpack};
+use crate::bitpack::{BLOCK, packed_len, required_bits};
+use crate::transposed::{pack_auto, unpack_auto};
 
 /// Low-`W`-bits mask for a `BitPackable` type (`u32::MAX`-style, but width-aware).
 #[inline]
@@ -78,6 +81,7 @@ pub fn encode<T: BitPackable>(values: &[T]) -> Vec<u8> {
 
         let mut max_zz: u64 = 0;
         zz_deltas.clear();
+        zz_deltas.push(T::from_u64(0));
         let mut prev = base;
         for &v in &chunk[1..] {
             let d = v.wrapping_sub(prev);
@@ -92,7 +96,7 @@ pub fn encode<T: BitPackable>(values: &[T]) -> Vec<u8> {
 
         base.write_le(&mut out);
         out.push(width as u8);
-        pack(&zz_deltas, width, &mut out);
+        pack_auto(&zz_deltas, width, &mut out);
     }
     out
 }
@@ -113,15 +117,14 @@ pub fn decode<T: BitPackable>(bytes: &[u8]) -> Vec<T> {
         let width = bytes[pos] as u32;
         pos += 1;
 
-        let ndeltas = count - 1;
-        let plen = packed_len(ndeltas, width);
+        let plen = packed_len(count, width);
         zz_deltas.clear();
-        unpack(&bytes[pos..pos + plen], width, ndeltas, &mut zz_deltas);
+        unpack_auto(&bytes[pos..pos + plen], width, count, &mut zz_deltas);
         pos += plen;
 
         out.push(base);
         let mut prev = base;
-        for &zz in &zz_deltas {
+        for &zz in zz_deltas.iter().skip(1) {
             let d = unzigzag::<T>(zz.to_u64());
             let v = prev.wrapping_add(d);
             out.push(v);
