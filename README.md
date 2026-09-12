@@ -71,3 +71,7 @@ CHANGELOG.md
 ## License
 
 MIT OR Apache-2.0.
+
+## Acknowledgements
+
+Developed with AI assistance.
