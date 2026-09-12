@@ -202,6 +202,55 @@ is parked until we have a reason to write 32 width-specialized kernels.
 
 ---
 
+## Experiment 004 -- Per-block cascade on a mixed column
+
+**Hypothesis.** Encoding each 1024-value block with every leaf codec and
+keeping the shortest will beat any single codec on a column that *changes
+structure* across blocks.
+
+**Motivation.** Experiment 002: no codec won every homogeneous workload. Real
+tables are not homogeneous.
+
+**Experiment.** 4M `u32`s, blocks cycling through monotonic, constant-run,
+small-range, and random. Compare cascade ratio to FOR/delta/RLE/dictionary.
+Record the tag histogram.
+
+**Configuration.** `examples/l4_cascade.rs`. Same machine.
+
+**Baseline.** Each leaf codec on the same mixed column.
+
+**Result.**
+
+| codec    | ratio | notes                                      |
+|----------|-------|--------------------------------------------|
+| cascade  | **2.88x** | tags: FOR 1954, delta 977, raw 976, RLE 0, dict 0 |
+| delta    | 2.84x | best leaf                                  |
+| FOR      | 2.45x |                                            |
+| RLE      | 0.99x | expands on mixed                           |
+| dict     | 0.86x | expands on mixed                           |
+
+**Interpretation.**
+- Cascade *does* win, but only by **1.4%** over delta (2.88 vs 2.84). The
+  mixed column is half "FOR-friendly or raw" and a quarter monotonic; delta
+  is already a decent default.
+- The histogram is the real finding: the selector used **three** tags (FOR
+  for runs *and* small-range, delta for monotonic, raw for random). RLE lost
+  even on constant blocks because FOR-of-equals is 13 bytes vs RLE's ~30.
+- Encode cost is ~5x a single codec (we try all five). Decode is one tag
+  branch per block -- cheap. Cascade is a *ratio* tool, not a speed tool.
+- "Real datasets" here are structured synthetic blocks, not downloaded
+  tables. The structure is the thing being tested; a Parquet file would
+  change the *mix*, not the mechanism.
+
+**Failure / surprise.** RLE never won a block. Constant runs are FOR's
+best case (width 0). RLE needs *long-but-varied* runs to beat FOR, and our
+"run" blocks were a single value.
+
+**Next question.** L5: apply the same measurement discipline to floats /
+embeddings (lossless shuffle, FP16, INT8).
+
+---
+
 <!-- Template for the next entry:
 
 ## Experiment 00N -- <title>

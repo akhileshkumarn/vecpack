@@ -14,7 +14,7 @@ embeddings and tensors** to fit more data into limited memory.
 
 ## Status
 
-L3. Implemented and tested (39 unit + 9 round-trip tests):
+L4. Implemented and tested:
 
 - `bitpack` -- fixed-width bit-packing / unpacking of `u32` and `u64`.
 - `frame_of_reference` -- per-1024-block minimum subtraction + bit-packing.
@@ -23,7 +23,8 @@ L3. Implemented and tested (39 unit + 9 round-trip tests):
 - `dictionary` -- first-seen table + bit-packed indices.
 - `Codec` / `Scheme` -- one interface over all four encodings.
 - `transposed` -- FastLanes-style lane-major bit-pack for 1024-value blocks.
-- Benchmarks: `examples/bench.rs` (ratios), `examples/l3_roofline.rs` (speed).
+- `cascade` -- per-block pick of the shortest leaf (or raw).
+- Benchmarks: `examples/bench.rs`, `l3_roofline.rs`, `l4_cascade.rs`.
 
 See [docs/research-notebook.md](docs/research-notebook.md) for measured results
 and interpretation.

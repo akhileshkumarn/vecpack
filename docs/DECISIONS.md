@@ -140,6 +140,20 @@ we actually select.
 
 ---
 
+## ADR-0009: Cascade tries every leaf and stores a per-block tag
+
+**Context.** L2 proved no codec dominates. A selector is now justified.
+
+**Decision.** For each block, encode with FOR, delta, RLE, dictionary, and
+raw; keep the shortest; write `tag + len + payload`. Raw exists so we never
+expand past the original bytes.
+
+**Tradeoff.** ~5x encode cost. Tiny ratio win on the mixed column we tried
+(2.88 vs 2.84). The value is robustness (cannot do worse than raw) and a
+histogram that *shows* which structure is present.
+
+---
+
 ## ADR-0008: Transposed layout, stack accumulators, runtime width
 
 **Context.** L3 asked whether a FastLanes-style layout would jump decode
@@ -169,8 +183,9 @@ The higher levels should emerge from measurements, not be forced.
   unpack (1.37 vs 0.88 GiB/s), 21% of memcpy roofline (6.4 GiB/s). Not
   FastLanes-class; runtime width + u128 shifts limit auto-vec. Stack
   accumulators (ADR-0008).
-- **L4** -- Real datasets + cascading (BtrBlocks-style per-block scheme
-  selection); reproducible benchmark suite.
+- **L4 (done)** -- Per-block cascade. Experiment 004: 2.88x vs best leaf
+  2.84x on mixed blocks; selector used FOR/delta/raw. RLE never won a
+  constant block (FOR width-0 is smaller).
 - **L5** -- Re-aim at the embedding/tensor niche (float split/byte-shuffle,
   FP16/INT8 with error bounds); metrics: ratio + decode GB/s + memory footprint.
 - **L6 (optional, needs GPU)** -- on-device decode via Metal/MLX on the Mac.

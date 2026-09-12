@@ -6,6 +6,11 @@ API is unstable.
 
 ## [Unreleased]
 
+### Added (L4)
+- `cascade`: per-block greedy selection among FOR/delta/RLE/dictionary/raw.
+- `examples/l4_cascade.rs`. Experiment 004: 2.88x vs best leaf 2.84x.
+  ADR-0009.
+
 ### Added (L3)
 - `transposed`: lane-major bit-pack/unpack for full 1024-value blocks; FOR
   and delta use it automatically. Partial blocks stay scalar.
