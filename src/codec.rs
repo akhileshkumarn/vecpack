@@ -9,7 +9,7 @@
 //! existed at L1 would have been premature abstraction.
 
 use crate::BitPackable;
-use crate::{delta, dictionary, frame_of_reference, rle};
+use crate::{cascade, delta, dictionary, frame_of_reference, rle};
 
 /// A lossless integer codec over [`BitPackable`] columns.
 pub trait Codec {
@@ -25,9 +25,11 @@ pub enum Scheme {
     Delta,
     RunLength,
     Dictionary,
+    Cascade,
 }
 
 impl Scheme {
+    /// Leaf encodings only (no cascade). Cascade is a meta-codec on top.
     pub const ALL: [Scheme; 4] = [
         Scheme::FrameOfReference,
         Scheme::Delta,
@@ -41,6 +43,7 @@ impl Scheme {
             Scheme::Delta => "delta",
             Scheme::RunLength => "rle",
             Scheme::Dictionary => "dict",
+            Scheme::Cascade => "casc",
         }
     }
 
@@ -50,6 +53,7 @@ impl Scheme {
             Scheme::Delta => delta::encode(values),
             Scheme::RunLength => rle::encode(values),
             Scheme::Dictionary => dictionary::encode(values),
+            Scheme::Cascade => cascade::encode(values),
         }
     }
 
@@ -59,6 +63,7 @@ impl Scheme {
             Scheme::Delta => delta::decode(bytes),
             Scheme::RunLength => rle::decode(bytes),
             Scheme::Dictionary => dictionary::decode(bytes),
+            Scheme::Cascade => cascade::decode(bytes),
         }
     }
 }
@@ -101,5 +106,16 @@ impl Codec for Dictionary {
     }
     fn decode<T: BitPackable>(bytes: &[u8]) -> Vec<T> {
         dictionary::decode(bytes)
+    }
+}
+
+pub struct Cascade;
+
+impl Codec for Cascade {
+    fn encode<T: BitPackable>(values: &[T]) -> Vec<u8> {
+        cascade::encode(values)
+    }
+    fn decode<T: BitPackable>(bytes: &[u8]) -> Vec<T> {
+        cascade::decode(bytes)
     }
 }

@@ -17,6 +17,7 @@ use std::time::Instant;
 use flate2::Compression;
 use flate2::write::DeflateEncoder;
 
+use vecpack::cascade;
 use vecpack::Scheme;
 
 /// Deterministic SplitMix64 PRNG for reproducible synthetic data.
@@ -143,5 +144,46 @@ fn main() {
             );
         }
         println!();
+    }
+
+    // Mixed column: 4 block types tiled. Cascade should beat any single leaf.
+    let n = 4_000_000usize;
+    let mut rng = SplitMix64::new(0xC0FFEE);
+    let mut mixed = Vec::with_capacity(n);
+    while mixed.len() < n {
+        let kind = mixed.len() / 1024 % 4;
+        let take = (n - mixed.len()).min(1024);
+        match kind {
+            0 => {
+                let base = 1_600_000_000u32.wrapping_add(mixed.len() as u32);
+                mixed.extend((0..take as u32).map(|i| base.wrapping_add(i)));
+            }
+            1 => mixed.extend(std::iter::repeat(rng.below(4) as u32).take(take)),
+            2 => mixed.extend((0..take).map(|_| rng.below(1000) as u32)),
+            _ => mixed.extend((0..take).map(|_| rng.next_u64() as u32)),
+        }
+    }
+    let raw = mixed.len() * 4;
+    let casc = cascade::encode(&mixed);
+    let hist = cascade::tag_histogram(&casc);
+    println!(
+        "{:<20} {:<6} {:>9.2}x  tags for/delta/rle/dict/raw = {}/{}/{}/{}/{}",
+        "mixed_blocks",
+        "casc",
+        raw as f64 / casc.len() as f64,
+        hist[0],
+        hist[1],
+        hist[2],
+        hist[3],
+        hist[4]
+    );
+    for scheme in Scheme::ALL {
+        let enc = scheme.encode(&mixed);
+        println!(
+            "{:<20} {:<6} {:>9.2}x",
+            "mixed_blocks",
+            scheme.name(),
+            raw as f64 / enc.len() as f64
+        );
     }
 }

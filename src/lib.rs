@@ -91,6 +91,7 @@ impl_bitpackable!(u32, 32, 4);
 impl_bitpackable!(u64, 64, 8);
 
 pub mod bitpack;
+pub mod cascade;
 pub mod codec;
 pub mod delta;
 pub mod dictionary;
