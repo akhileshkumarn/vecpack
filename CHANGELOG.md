@@ -6,7 +6,14 @@ API is unstable.
 
 ## [Unreleased]
 
-### Added
+### Added (L3)
+- `transposed`: lane-major bit-pack/unpack for full 1024-value blocks; FOR
+  and delta use it automatically. Partial blocks stay scalar.
+- `examples/l3_roofline.rs`: scalar vs transposed vs memcpy.
+- Experiment 003: 1.56x unpack (1.37 vs 0.88 GiB/s), 21% of a 6.4 GiB/s
+  memcpy roofline. ADR-0008.
+
+### Added (L2)
 - `delta`: per-block consecutive differences, zig-zag encoded inside the
   original integer width, then bit-packed. Independent `base` per block.
 - `rle`: `(value, count-1)` runs with bit-packed counts.

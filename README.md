@@ -14,7 +14,7 @@ embeddings and tensors** to fit more data into limited memory.
 
 ## Status
 
-L2. Implemented and tested (36 tests):
+L3. Implemented and tested (39 unit + 9 round-trip tests):
 
 - `bitpack` -- fixed-width bit-packing / unpacking of `u32` and `u64`.
 - `frame_of_reference` -- per-1024-block minimum subtraction + bit-packing.
@@ -22,7 +22,8 @@ L2. Implemented and tested (36 tests):
 - `rle` -- `(value, count)` runs with bit-packed counts.
 - `dictionary` -- first-seen table + bit-packed indices.
 - `Codec` / `Scheme` -- one interface over all four encodings.
-- A dependency-free benchmark harness (`examples/bench.rs`).
+- `transposed` -- FastLanes-style lane-major bit-pack for 1024-value blocks.
+- Benchmarks: `examples/bench.rs` (ratios), `examples/l3_roofline.rs` (speed).
 
 See [docs/research-notebook.md](docs/research-notebook.md) for measured results
 and interpretation.
@@ -46,9 +47,9 @@ Takeaways (details in the notebook):
 - Experiment 001 guessed delta would hit ~10x on timestamps. It hit **7.92x**
   because zig-zag of step `+7` needs 4 bits, not 3. Still beats FOR (2.66x)
   and deflate (3.07x).
-- Decode is still ~0.3-0.9 GiB/s (scalar bit-packing). RLE on long runs is
-  the exception (3.44 GiB/s) because it emits far fewer symbols. Vectorized
-  decode remains the L3 target.
+- Decode: transposed unpack is **1.56x** the scalar packer (1.37 vs 0.88
+  GiB/s) and 21% of memcpy (6.4 GiB/s). Not FastLanes-class -- see
+  Experiment 003.
 
 ## Build & test
 

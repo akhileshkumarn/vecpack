@@ -147,6 +147,61 @@ Decode throughput stayed in the same 0.3-0.9 GiB/s band as L1, except RLE on
 
 ---
 
+## Experiment 003 -- Transposed bit-unpack vs scalar vs memcpy
+
+**Hypothesis.** A FastLanes-style lane-major layout will auto-vectorize and
+move decode from ~0.6 GiB/s toward this machine's memory bandwidth.
+
+**Motivation.** Experiment 001/002 diagnosed the scalar packer's serial bit
+cursor as the throughput ceiling. Ratio is a solved (per-workload) problem;
+speed is not.
+
+**Experiment.** Unpack 4096 blocks of 1024 `u32`s at width 10 three ways:
+scalar, transposed, and a raw `memcpy` of the uncompressed 16 MiB as the
+roofline. Also measure end-to-end FOR decode (which now uses the transposed
+kernel on full blocks).
+
+**Configuration.** Same machine. `examples/l3_roofline.rs`. Accumulators are
+on the stack (`[u128; 32]`) -- an earlier heap `Vec` per block was measured
+and discarded as an implementation tax, not a layout result.
+
+**Baseline.** Scalar unpack on the same data. memcpy as the bandwidth ceiling.
+
+**Result.**
+
+| kernel              | GiB/s (raw) | vs scalar | vs memcpy |
+|---------------------|-------------|-----------|-----------|
+| memcpy (roofline)   | 6.41        | --        | 100%      |
+| scalar unpack       | 0.88        | 1.00x     | 14%       |
+| transposed unpack   | 1.37        | **1.56x** | 21%       |
+| FOR decode (L3)     | 1.11        | --        | 17%       |
+
+**Interpretation.**
+- The layout change is a real, reproducible **1.56x** on the unpack kernel
+  and lifts FOR decode from ~0.62 (L1) to **1.11 GiB/s**.
+- It is **not** the 10-100x FastLanes advertises. Three reasons, all
+  structural: (1) `width` is a runtime value, so LLVM cannot unroll a
+  width-specific kernel; FastLanes monomorphizes every `W`. (2) A 128-bit
+  accumulator is shifted in scalar integer units on this CPU -- AVX2 does
+  not have a cheap 128-bit variable shift in the way the loop is written.
+  (3) We still scatter/gather via byte offsets rather than a fully
+  transposed SIMD load.
+- The roofline is ~6.4 GiB/s memcpy. We sit at 21% of it. There is headroom,
+  but closing it means *const-generic per-width kernels*, not more of this
+  runtime-width loop. That is a later optimization, not a failed L3 -- L3
+  answered "does layout matter?" with yes, 1.56x, and "are we at the
+  roofline?" with no.
+
+**Failure / surprise.** The first implementation allocated a `Vec<u128>` per
+block and looked like a wash. That was a measurement of malloc, not of
+layout. Stack arrays recovered the 1.56x. Hypothesis of "order-of-magnitude
+from layout alone" was wrong.
+
+**Next question.** L4: pick the best encoding *per block*. The speed question
+is parked until we have a reason to write 32 width-specialized kernels.
+
+---
+
 <!-- Template for the next entry:
 
 ## Experiment 00N -- <title>

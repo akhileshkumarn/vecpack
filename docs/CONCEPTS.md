@@ -141,9 +141,10 @@ decodes at *tens of GiB/s*. Why the gap?
   execute several instructions per cycle, but only if the work is *independent*.
 - **The FastLanes trick (L3).** Store values in a **transposed / interleaved**
   layout so that 32 (or more) independent "lanes" are unpacked in parallel with
-  the same shifts/masks. The compiler then auto-vectorizes the inner loop into
-  SIMD, and throughput jumps by an order of magnitude -- *with no change to the
-  compression ratio*.
+  the same shifts/masks. Experiment 003 measured **1.56x** vs our scalar
+  packer (1.37 vs 0.88 GiB/s) and 21% of memcpy (6.4 GiB/s). The
+  order-of-magnitude jump needs *const-generic per-width* kernels, which we
+  have not written. Layout matters; it is not magic.
 
 So a codec has (at least) two independent axes:
 - **Compression ratio** -- bytes saved (driven by the encoding: FOR, delta, ...).

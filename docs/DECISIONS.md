@@ -140,6 +140,23 @@ we actually select.
 
 ---
 
+## ADR-0008: Transposed layout, stack accumulators, runtime width
+
+**Context.** L3 asked whether a FastLanes-style layout would jump decode
+throughput by an order of magnitude.
+
+**Decision.** Adopt a lane-major pack for full 1024-value blocks (`u32`: 32
+lanes; `u64`: 16). Keep a runtime `width` and a 128-bit per-lane
+accumulator on the *stack*. Partial blocks stay on the scalar packer.
+
+**Tradeoff.** +1.56x unpack vs scalar, FOR decode 0.62 -> 1.11 GiB/s. We did
+not reach the memcpy roofline or published FastLanes numbers. Const-generic
+per-width kernels would likely do better and are deliberately *not* written
+until a workload needs them (32 copies of nearly the same function is a
+lot of surface for a 2-4x maybe).
+
+---
+
 ## Roadmap (levels)
 
 The higher levels should emerge from measurements, not be forced.
@@ -148,9 +165,10 @@ The higher levels should emerge from measurements, not be forced.
 - **L2 (done)** -- Delta (zig-zag), RLE, dictionary; `Codec` / `Scheme`;
   expanded benchmark. Experiment 002: delta 7.92x on timestamps (not the
   guessed 10x -- zig-zag needs 4 bits for steps 0-7).
-- **L3** -- Vectorized decode: transposed (FastLanes-style) layout so LLVM
-  auto-vectorizes; verify with `cargo-show-asm`; roofline analysis. Target:
-  close the gap to `fastlanes`.
+- **L3 (done)** -- Transposed bit-pack. Experiment 003: 1.56x vs scalar
+  unpack (1.37 vs 0.88 GiB/s), 21% of memcpy roofline (6.4 GiB/s). Not
+  FastLanes-class; runtime width + u128 shifts limit auto-vec. Stack
+  accumulators (ADR-0008).
 - **L4** -- Real datasets + cascading (BtrBlocks-style per-block scheme
   selection); reproducible benchmark suite.
 - **L5** -- Re-aim at the embedding/tensor niche (float split/byte-shuffle,
