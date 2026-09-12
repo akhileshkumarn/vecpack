@@ -71,10 +71,79 @@ does on monotonic data -- a useful, concrete motivator rather than a bug.
 
 **Next question(s).**
 1. Does **delta encoding** turn the timestamp case from 2.66x into ~10x?
-   (L2 -- next.)
+   (L2 -- this experiment.)
 2. Can a **transposed (FastLanes-style) layout** get decode from 0.6 GiB/s toward
    the memory-bandwidth roofline? First measure this machine's bandwidth. (L3.)
 3. What is this machine's actual memory bandwidth (to set the roofline ceiling)?
+
+---
+
+## Experiment 002 -- L2 encodings (delta, RLE, dictionary)
+
+**Hypothesis.** Delta encoding turns `timestamps_jitter` from 2.66x (FOR) into
+about 10x, and beats deflate (3.07x) on that workload. RLE and dictionary win
+on long-run / low-cardinality data and lose (expand) on unique/random data.
+
+**Motivation.** Experiment 001 showed FOR cannot capture a *trend*. Delta is
+the encoding that should. RLE and dictionary complete the classic lightweight
+set so we can later pick per-block (L4) instead of guessing.
+
+**Experiment.** Same three L1 workloads plus a new `long_runs_4_labels`
+(runs of length 64-256 over 4 labels). Compare FOR, delta, RLE, dictionary,
+and deflate. 36 tests (including `decode(encode(x)) == x` on every scheme).
+
+**Configuration.** Same machine/toolchain as Experiment 001. Harness now
+reports every scheme.
+
+**Baseline.** Experiment 001 FOR + deflate numbers, plus raw = 4 bytes/value.
+
+**Result.**
+
+| workload            | deflate | FOR    | delta  | RLE     | dict   |
+|---------------------|---------|--------|--------|---------|--------|
+| timestamps_jitter   | 3.07x   | 2.66x  | **7.92x** | 1.04x | 0.64x  |
+| small_range_0_1000  | 2.24x   | 3.19x  | 2.90x  | 0.94x   | 3.20x  |
+| random_u32          | 1.00x   | 1.00x  | 1.00x  | 1.00x   | 0.59x  |
+| long_runs_4_labels  | **212.93x** | 15.85x | 11.13x | 158.33x | 16.00x |
+
+Decode throughput stayed in the same 0.3-0.9 GiB/s band as L1, except RLE on
+`long_runs` (3.44 GiB/s) -- it emits far fewer runs than values. Dictionary
+*encode* is an outlier at 0.03-0.29 GiB/s (HashMap build).
+
+**Interpretation.**
+- **Delta on timestamps: 7.92x, not ~10x.** The hypothesis was slightly
+  optimistic. Steps are 0-7; zig-zag of `+7` is `14`, which needs **4 bits**,
+  so the information-theoretic ceiling is `32/4 = 8x`. 7.92x is that ceiling
+  minus per-block headers. The ~10x guess assumed unsigned 3-bit steps and
+  forgot zig-zag widens the max code. Honest miss; the *direction* was right
+  (2.66x -> 7.92x, and we now beat deflate 3.07x).
+- **small_range:** FOR (3.19x) and dictionary (3.20x) tie. Both reduce to ~10
+  bits (range 1000, or 1000 distinct ids). Delta is a bit worse (2.90x): a
+  random walk inside a range has larger consecutive jumps than the range
+  itself would suggest. RLE expands (0.94x) -- almost no repeats.
+- **random:** everyone ~1.00x except dictionary, which *expands* to 0.59x
+  (dictionary as large as the data, plus an index stream). Expected.
+- **long_runs:** RLE (158x) is the lightweight winner; deflate (213x) still
+  beats it. Dictionary/FOR sit at 16x (2-bit codes for 4 labels) and cannot
+  see run length. This is why cascade selection exists.
+- **Throughput** is still scalar-bound. L3 (vectorized layout) is unchanged
+  as the next *speed* question. L2 answered the *ratio* question.
+
+**Failure / surprise.**
+1. The 10x timestamp prediction missed zig-zag's extra bit. Documented.
+2. Dictionary encode is ~20x slower than FOR -- `HashMap` lookup/insert per
+   value. Fine for v0; a specialized map is a later option, not a priority
+   until a workload needs it.
+3. RLE did not beat deflate on the run-heavy workload. Lightweight encodings
+   are not universally smaller; they are *faster to decode* and *selectable*.
+
+**Next question.**
+1. L3: can a transposed bit-pack layout move decode from ~0.6 GiB/s toward
+   this machine's memory bandwidth?
+2. What *is* this machine's memory bandwidth? Measure it before claiming a
+   roofline.
+3. A greedy per-block selector (try cheap encodings, pick best) is now
+   justified -- no single codec won every workload. That is L4.
 
 ---
 

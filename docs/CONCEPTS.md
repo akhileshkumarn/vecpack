@@ -2,7 +2,8 @@
 
 This is the "teach me" companion to the code. It explains the ideas the codecs
 rely on, why they work, and where the performance goes. Read it alongside
-`src/bitpack.rs` and `src/frame_of_reference.rs`.
+`src/bitpack.rs`, `src/frame_of_reference.rs`, `src/delta.rs`, `src/rle.rs`,
+and `src/dictionary.rs`.
 
 ---
 
@@ -90,12 +91,42 @@ bits. That's why in our first benchmark FOR only got 2.66x on
 `timestamps_jitter` and *lost* to deflate (3.07x).
 
 **Delta encoding** stores `value[i] - value[i-1]` instead. For monotonic
-timestamps those deltas are tiny (the step, ~0-7 here) -> ~3 bits -> ~10x. This
-is the concrete, measured reason delta encoding is the next thing to build (L2).
+timestamps those deltas are tiny (the step, 0-7 here).
+
+One catch: a difference can be negative (the series can go down). We compute
+the wrapping difference in the value's own width, then **zig-zag** map it so
+small-magnitude signed values become small unsigned codes:
+
+```
+ 0 -> 0,  -1 -> 1,  +1 -> 2,  -2 -> 3,  +2 -> 4, ...
+```
+
+Zig-zag of `+7` is `14`, which needs **4 bits**, not 3. So the ceiling on
+`timestamps_jitter` is `32/4 = 8x`, not the ~10x we first guessed. Experiment
+002 measured **7.92x** -- the ceiling minus headers. FOR was 2.66x; deflate
+was 3.07x. Direction right, constant wrong, and we wrote that down.
 
 The lesson: *the right encoding depends on the data's structure*, and you find
-out which by **measuring**, not guessing. This is the whole game in lightweight
-compression (and why cascading formats try several and pick the best per block).
+out which by **measuring**, not guessing. Experiment 002 made this concrete:
+delta won timestamps, FOR/dictionary tied on small-range, RLE won long runs,
+and nobody beat 1.00x on random. That is why cascading formats try several
+encodings and pick the best per block.
+
+---
+
+## 4b. RLE and dictionary (the other two L2 encodings)
+
+**Run-length encoding** replaces a streak of equal values with `(value, count)`.
+A column of a million `0`s becomes one run. A column of unique values becomes
+a million runs of length 1 and *expands*. We store counts as `count - 1`
+bit-packed (so a run of 1 costs zero extra bits when every run has length 1).
+
+**Dictionary encoding** builds a first-seen table of distinct values and
+replaces each value with its index. Four labels -> 2-bit indices -> 16x.
+A million unique values -> a dictionary as large as the input, plus indices
+-> expansion (0.59x on `random_u32` in Experiment 002).
+
+Neither is "better" than FOR or delta. Each matches a different structure.
 
 ---
 

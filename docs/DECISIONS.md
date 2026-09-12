@@ -108,13 +108,46 @@ toolchain there.
 
 ---
 
+## ADR-0006: Zig-zag deltas stay in the original integer width
+
+**Context.** Consecutive differences are signed. Widening every `u32` delta to
+`i64` would work but doubles working-set size and complicates `BitPackable`.
+
+**Decision.** Compute `wrapping_sub` in the value's own width, then zig-zag
+within that width (`0, -1, +1, -2, ...` -> `0, 1, 2, 3, ...`). Blocks are
+independent (each stores its first value as `base`) so a wrap at a block
+boundary cannot poison the next block.
+
+**Tradeoff.** Zig-zag of a positive step `k` is `2k`, so the max code for
+steps 0-7 is 14 (4 bits) rather than 7 (3 bits). That is why the timestamp
+ratio is ~8x rather than ~10x. We accept the extra bit for a uniform
+signed-delta story that also handles decreases.
+
+---
+
+## ADR-0007: A `Codec` trait only after the second encoding existed
+
+**Context.** L1 had one encoding. Introducing a trait then would have been
+theatre.
+
+**Decision.** Add `Codec` and a runtime `Scheme` enum at L2, when FOR, delta,
+RLE, and dictionary all share `decode(encode(x)) == x` and the bench needs
+to iterate them.
+
+**Tradeoff.** The on-disk streams are still per-codec (no shared header byte).
+A cascade selector that writes a scheme tag is L4; we will add the tag when
+we actually select.
+
+---
+
 ## Roadmap (levels)
 
 The higher levels should emerge from measurements, not be forced.
 
 - **L1 (done)** -- FOR + bit-packing, correctness, baseline benchmark.
-- **L2** -- Delta encoding (motivated by the timestamp result), RLE, dictionary;
-  a common `Codec` trait; expand the benchmark matrix.
+- **L2 (done)** -- Delta (zig-zag), RLE, dictionary; `Codec` / `Scheme`;
+  expanded benchmark. Experiment 002: delta 7.92x on timestamps (not the
+  guessed 10x -- zig-zag needs 4 bits for steps 0-7).
 - **L3** -- Vectorized decode: transposed (FastLanes-style) layout so LLVM
   auto-vectorizes; verify with `cargo-show-asm`; roofline analysis. Target:
   close the gap to `fastlanes`.
