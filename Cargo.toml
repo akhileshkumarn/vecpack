@@ -1,0 +1,25 @@
+[package]
+name = "vecpack"
+version = "0.1.0"
+edition = "2024"
+description = "Lightweight compression codecs (bit-packing, frame-of-reference) with rigorous, dependency-light benchmarking. Learning/research project."
+license = "MIT OR Apache-2.0"
+repository = ""
+readme = "README.md"
+
+# The core library has ZERO dependencies (std only) -- deliberate, for a
+# from-scratch systems project and to keep the build trivial on a bare toolchain.
+[dependencies]
+
+[dev-dependencies]
+# Pure-Rust general-purpose compressor (miniz_oxide/zlib-rs backend, no C, no
+# windows-sys) used ONLY as a compression-ratio reference point in the example
+# benchmark. See docs/DECISIONS.md (ADR-0004) for why we avoid proptest/criterion
+# for now (they transitively require an assembler this Windows box lacks).
+flate2 = "1"
+
+# A release-like profile so tests/examples measure representative performance.
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

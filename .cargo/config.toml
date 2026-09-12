@@ -1,0 +1,13 @@
+# Local build configuration.
+#
+# We compile for the *native* CPU so that LLVM auto-vectorization can use the
+# widest SIMD this machine supports (e.g. AVX2/AVX-512 on x86, NEON on ARM).
+# Without this, the default x86-64 baseline only guarantees SSE2, which would
+# under-report the vectorized decode throughput we care about measuring.
+#
+# TRADEOFF (documented in docs/DECISIONS.md, ADR-0003): binaries built this way
+# are NOT portable to older CPUs. That is fine for a local benchmarking/research
+# project. Remove or override this before distributing artifacts or
+# cross-compiling for another machine (e.g. the Apple-Silicon Mac later).
+[build]
+rustflags = ["-C", "target-cpu=native"]
