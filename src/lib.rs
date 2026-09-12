@@ -9,7 +9,14 @@
 //!
 //! - [`bitpack`]: fixed-width bit-packing of unsigned integers.
 //! - [`frame_of_reference`]: subtract a per-block minimum, then bit-pack the
-//!   (smaller) residuals.
+//!   (smaller) residuals. Good for values in a narrow range.
+//! - [`delta`]: store per-block consecutive differences (zig-zag encoded), then
+//!   bit-pack. Good for monotonic/trending data (timestamps, ids).
+//! - [`rle`]: consecutive equal values become `(value, count)` runs.
+//! - [`dictionary`]: replace values with small indices into a first-seen table.
+//!
+//! All four implement [`codec::Codec`] and can be selected at runtime via
+//! [`codec::Scheme`].
 //!
 //! ## The `BitPackable` abstraction
 //!
@@ -83,4 +90,10 @@ impl_bitpackable!(u32, 32, 4);
 impl_bitpackable!(u64, 64, 8);
 
 pub mod bitpack;
+pub mod codec;
+pub mod delta;
+pub mod dictionary;
 pub mod frame_of_reference;
+pub mod rle;
+
+pub use codec::{Codec, Scheme};

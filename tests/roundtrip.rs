@@ -11,8 +11,12 @@
 //! `SplitMix64` generator. Each case is seeded reproducibly, so a failure prints
 //! the exact seed/length needed to reproduce it.
 
+use vecpack::Scheme;
 use vecpack::bitpack;
+use vecpack::delta;
+use vecpack::dictionary;
 use vecpack::frame_of_reference as for_codec;
+use vecpack::rle;
 
 /// Minimal, fast, deterministic PRNG (SplitMix64). Not cryptographic; perfect
 /// for reproducible test/benchmark data.
@@ -74,6 +78,88 @@ fn for_roundtrip_clustered() {
         let enc = for_codec::encode(&values);
         let dec: Vec<u32> = for_codec::decode(&enc);
         assert_eq!(dec, values, "clustered mismatch at seed={seed} len={len} spread={spread}");
+    }
+}
+
+#[test]
+fn delta_roundtrip_u32_random() {
+    for seed in 0..2000u64 {
+        let mut rng = SplitMix64::new(seed.wrapping_mul(0xFACE).wrapping_add(11));
+        let len = rng.below(5000) as usize;
+        let values: Vec<u32> = (0..len).map(|_| rng.next_u32()).collect();
+        let enc = delta::encode(&values);
+        let dec: Vec<u32> = delta::decode(&enc);
+        assert_eq!(dec, values, "delta u32 mismatch at seed={seed} len={len}");
+    }
+}
+
+#[test]
+fn delta_roundtrip_u64_and_trends() {
+    for seed in 0..2000u64 {
+        let mut rng = SplitMix64::new(seed.wrapping_mul(0xBEEF).wrapping_add(13));
+        let len = rng.below(4000) as usize;
+        // Mix of increasing and decreasing runs to exercise zig-zag both ways.
+        let mut v: u64 = rng.next_u64();
+        let values: Vec<u64> = (0..len)
+            .map(|i| {
+                let step = rng.below(64) as u64;
+                if i % 2 == 0 {
+                    v = v.wrapping_add(step);
+                } else {
+                    v = v.wrapping_sub(step);
+                }
+                v
+            })
+            .collect();
+        let enc = delta::encode(&values);
+        let dec: Vec<u64> = delta::decode(&enc);
+        assert_eq!(dec, values, "delta u64 mismatch at seed={seed} len={len}");
+    }
+}
+
+#[test]
+fn rle_roundtrip_random_and_runs() {
+    for seed in 0..2000u64 {
+        let mut rng = SplitMix64::new(seed.wrapping_mul(0x1111).wrapping_add(17));
+        let len = rng.below(4000) as usize;
+        // Mix of short and long runs so we hit both compact and expanding cases.
+        let mut values = Vec::with_capacity(len);
+        while values.len() < len {
+            let v = rng.next_u32();
+            let run = 1 + rng.below(64) as usize;
+            let take = run.min(len - values.len());
+            values.extend(std::iter::repeat(v).take(take));
+        }
+        let enc = rle::encode(&values);
+        let dec: Vec<u32> = rle::decode(&enc);
+        assert_eq!(dec, values, "rle mismatch at seed={seed} len={len}");
+    }
+}
+
+#[test]
+fn dictionary_roundtrip_low_and_high_card() {
+    for seed in 0..2000u64 {
+        let mut rng = SplitMix64::new(seed.wrapping_mul(0x2222).wrapping_add(19));
+        let len = rng.below(4000) as usize;
+        let card = 1 + rng.below(64) as u32;
+        let values: Vec<u32> = (0..len).map(|_| rng.next_u32() % card).collect();
+        let enc = dictionary::encode(&values);
+        let dec: Vec<u32> = dictionary::decode(&enc);
+        assert_eq!(dec, values, "dict mismatch at seed={seed} len={len} card={card}");
+    }
+}
+
+#[test]
+fn every_scheme_roundtrips_via_codec_trait() {
+    for seed in 0..200u64 {
+        let mut rng = SplitMix64::new(seed.wrapping_mul(0x3333).wrapping_add(23));
+        let len = rng.below(1500) as usize;
+        let values: Vec<u32> = (0..len).map(|_| rng.next_u32()).collect();
+        for scheme in Scheme::ALL {
+            let enc = scheme.encode(&values);
+            let dec: Vec<u32> = scheme.decode(&enc);
+            assert_eq!(dec, values, "{:?} mismatch at seed={seed} len={len}", scheme);
+        }
     }
 }
 
